@@ -3,174 +3,199 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>3D Karte – Schwarz, Licht aktiv, hohe Texture-Qualität</title>
+  <title>3D Karte – sichtbar, Licht & HQ-Texturen</title>
   <style>
     html, body { height: 100%; margin: 0; background: #000; }
     canvas { width: 100%; height: 100%; display: block; touch-action: none; background: #000; }
   </style>
 </head>
 <body>
-  <script type="module">
-    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-    import { RoomEnvironment } from 'https://unpkg.com/three@0.160.0/examples/jsm/environments/RoomEnvironment.js';
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { RoomEnvironment } from 'https://unpkg.com/three@0.160.0/examples/jsm/environments/RoomEnvironment.js';
 
-    // ===== Renderer =====
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setClearColor(0x000000, 1);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
-    renderer.physicallyCorrectLights = true;
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setClearColor(0x000000, 1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.3;
+renderer.physicallyCorrectLights = true;
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-    // ===== Scene & Camera =====
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(35, window.innerWidth/window.innerHeight, 0.1, 100);
-    camera.position.set(0,0,4);
+// Scene / Camera
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, window.innerWidth/window.innerHeight, 0.1, 100);
+camera.position.set(0,0,4);
+camera.lookAt(0,0,0);
+let zoomZ = 4; const Z_MIN = 2.4, Z_MAX = 7.6;
+const setZoom = z => zoomZ = THREE.MathUtils.clamp(z, Z_MIN, Z_MAX);
 
-    // HDRI-ähnliche Umgebung für bessere Reflexe
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    const env = new RoomEnvironment();
-    const envMap = pmrem.fromScene(env, 0.04).texture; // weiche, hochwertige Umgebung
-    scene.environment = envMap;
+// Env + Lights (heller, sichtbarer)
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-    // ===== Lights (wirken nun auf die Materialien) =====
-    const amb = new THREE.AmbientLight(0xffffff, 0.18); // zartes Grundlicht
-    const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(1.2, 1.4, 1.0); key.castShadow = false;
-    const rim = new THREE.DirectionalLight(0xffffff, 0.45); rim.position.set(-1.0, -0.2, -1.2);
-    scene.add(amb, key, rim);
+const amb = new THREE.AmbientLight(0xffffff, 0.32);
+const key = new THREE.DirectionalLight(0xffffff, 1.25); key.position.set(1.6, 1.6, 1.2);
+const rim = new THREE.DirectionalLight(0xffffff, 0.60); rim.position.set(-1.2, -0.2, -1.4);
+scene.add(amb, key, rim);
 
-    // ===== Karte Geometrie (9:15.52) =====
-    const ASPECT_W = 9, ASPECT_H = 15.52;
-    const cardH = 1.5;
-    const cardW = cardH * (ASPECT_W / ASPECT_H);
-    const thickness = 0.01;
+// Card geometry (9:15.52)
+const ASPECT_W = 9, ASPECT_H = 15.52;
+const cardH = 1.5;
+const cardW = cardH * (ASPECT_W / ASPECT_H);
+const thickness = 0.01;
 
-    // ===== Texturen laden (Front/Back) mit hoher Qualität =====
-    const FRONT_SRC = './assets/front.png';
-    const DEFAULT_BACK_SRC = './assets/backs/back-01.png';
+// Texture sources via query
+const FRONT_SRC = './assets/front.png';
+const DEFAULT_BACK_SRC = './assets/backs/back-01.png';
+const q = new URLSearchParams(location.search);
+const guest = q.get('guest');
+const backParam = q.get('back');
+const backSrc = backParam
+  ? (backParam.startsWith('./') || backParam.startsWith('http') ? backParam : `./assets/${backParam}`)
+  : (guest ? `./assets/backs/back-${String(guest).padStart(2,'0')}.png` : DEFAULT_BACK_SRC);
 
-    const q = new URLSearchParams(location.search);
-    const guest = q.get('guest');
-    const backParam = q.get('back');
-    const backSrc = backParam
-      ? (backParam.startsWith('./') || backParam.startsWith('http') ? backParam : `./assets/${backParam}`)
-      : (guest ? `./assets/backs/back-${String(guest).padStart(2,'0')}.png` : DEFAULT_BACK_SRC);
+// Loader with robust onLoad/onError
+const loader = new THREE.TextureLoader();
+function loadTextureHQ(url, onOk){
+  const tex = loader.load(url, () => { if (onOk) onOk(); }, undefined, () => {
+    console.warn('Bild nicht gefunden:', url);
+  });
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy?.() || 8;
+  tex.wrapS = THREE.ClampToEdgeWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
 
-    const loader = new THREE.TextureLoader();
+// Materials – mit Emissive & Fallback-Farbe (immer sichtbar)
+const sideMat = new THREE.MeshStandardMaterial({
+  color: 0x141414, metalness: 0.3, roughness: 0.55, envMapIntensity: 0.7,
+  emissive: 0x070707, emissiveIntensity: 0.6
+});
+const frontTex = loadTextureHQ(FRONT_SRC);
+const backTex  = loadTextureHQ(backSrc);
+backTex.wrapS = THREE.RepeatWrapping; backTex.repeat.x = -1; backTex.offset.x = 1;
 
-    function loadTextureHQ(url){
-      const tex = loader.load(url);
-      tex.colorSpace = THREE.SRGBColorSpace;     // korrekte Farbdarstellung
-      tex.generateMipmaps = true;                // Mipmaps für Schärfe in allen Distanzen
-      tex.minFilter = THREE.LinearMipmapLinearFilter; // „trilinear filtering“
-      tex.magFilter = THREE.LinearFilter;        // glattes Upscaling
-      tex.anisotropy = renderer.capabilities.getMaxAnisotropy?.() || 16; // maximal
-      tex.wrapS = THREE.ClampToEdgeWrapping;
-      tex.wrapT = THREE.ClampToEdgeWrapping;
-      return tex;
-    }
+const frontMat = new THREE.MeshStandardMaterial({
+  color: 0x262626, map: frontTex, metalness: 0.15, roughness: 0.55, envMapIntensity: 0.8,
+  emissive: 0x0a0a0a, emissiveIntensity: 0.5
+});
+const backMat  = new THREE.MeshStandardMaterial({
+  color: 0x262626, map: backTex,  metalness: 0.15, roughness: 0.55, envMapIntensity: 0.8,
+  emissive: 0x0a0a0a, emissiveIntensity: 0.5
+});
 
-    // Materialien: jetzt StandardMaterial mit map, damit Licht wirkt
-    const sideMat = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, metalness: 0.35, roughness: 0.6, envMapIntensity: 0.6 });
+const mats = [sideMat, sideMat, sideMat, sideMat, frontMat, backMat];
+const cardMesh = new THREE.Mesh(new THREE.BoxGeometry(cardW, cardH, thickness), mats);
 
-    const frontTex = loadTextureHQ(FRONT_SRC);
-    const backTex  = loadTextureHQ(backSrc);
-    // Back horizontal spiegeln, damit Schrift korrekt ist
-    backTex.wrapS = THREE.RepeatWrapping; backTex.repeat.x = -1; backTex.offset.x = 1;
+// Dünne weiße Kanten (nur zur Sichtbarkeit – bei Bedarf entfernen)
+{
+  const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(cardW, cardH, thickness));
+  const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.2, transparent: true }));
+  cardMesh.add(line);
+}
 
-    const frontMat = new THREE.MeshStandardMaterial({ map: frontTex, metalness: 0.2, roughness: 0.65, envMapIntensity: 0.7 });
-    const backMat  = new THREE.MeshStandardMaterial({ map: backTex,  metalness: 0.2, roughness: 0.65, envMapIntensity: 0.7 });
+const cardGroup = new THREE.Group();
+cardGroup.add(cardMesh);
+scene.add(cardGroup);
 
-    const mats = [sideMat, sideMat, sideMat, sideMat, frontMat, backMat]; // px,nx,py,ny,pz(front),nz(back)
-    const cardMesh = new THREE.Mesh(new THREE.BoxGeometry(cardW, cardH, thickness), mats);
+// Helpers
+const norm = deg => THREE.MathUtils.euclideanModulo(deg + 180, 360) - 180; // [-180,180)
+const shortest = (from,to) => norm(to - from);
+const isBack = y => Math.abs(norm(y)) > 179.5;
+const nearestFrontBack = y => { const n=norm(y); return Math.abs(n)<=90?0:(n>0?180:-180); };
+const nearestCardinal = z => {
+  const n = THREE.MathUtils.euclideanModulo(z,360); const opts=[0,90,180,270];
+  let best=0,b=1e9; for(const o of opts){ const d=Math.min(Math.abs(n-o),Math.abs(n-o+360),Math.abs(n-o-360)); if(d<b){b=d;best=o;} }
+  return best;
+};
 
-    const cardGroup = new THREE.Group();
-    cardGroup.add(cardMesh);
-    scene.add(cardGroup);
+// Interaction
+let angleX=0, angleY=0, angleZ=0;
+let animating=false, isDragging=false, isRotating=false, didRotate=false;
+let last={x:0,y:0};
+const Y_SENS=0.65, X_SENS=0.18, X_LIMIT=20, ROT_SENS_Z=1.0;
 
-    // ===== Interaktion (wie zuvor) =====
-    let angleX=0, angleY=0, angleZ=0;
-    let isDragging=false; let last={x:0,y:0};
-    let isRotating=false;
+function render(){
+  camera.position.z += (zoomZ - camera.position.z) * 0.18;
+  angleY = norm(angleY); angleZ = norm(angleZ);
+  angleX = THREE.MathUtils.clamp(angleX, -X_LIMIT, X_LIMIT);
+  cardGroup.rotation.set(THREE.MathUtils.degToRad(angleX),THREE.MathUtils.degToRad(angleY),THREE.MathUtils.degToRad(angleZ));
+  renderer.render(scene,camera);
+}
+renderer.setAnimationLoop(render);
 
-    function render(){
-      cardGroup.rotation.set(THREE.MathUtils.degToRad(angleX),THREE.MathUtils.degToRad(angleY),THREE.MathUtils.degToRad(angleZ));
-      renderer.render(scene,camera);
-    }
-    renderer.setAnimationLoop(render);
+// Snapping
+function animateTo({ y, x, z }){
+  animating = true;
+  const sY=angleY,sX=angleX,sZ=angleZ;
+  const dY=shortest(sY,y), dX=shortest(sX,x), dZ=shortest(sZ,(z??sZ));
+  const dur=420, t0=performance.now();
+  (function tick(t){
+    const p=Math.min(1,(t-t0)/dur), e=1-Math.pow(1-p,3);
+    angleY=sY+dY*e; angleX=sX+dX*e; angleZ=sZ+dZ*e;
+    if(p<1) requestAnimationFrame(tick); else { angleY=y; angleX=x; angleZ=(z??sZ); if(!isBack(angleY)) angleZ=0; animating=false; }
+  })(performance.now());
+}
+const snapAfterDrag   = ()=> { const yT=nearestFrontBack(angleY); const zT=isBack(yT)?angleZ:0;         animateTo({y:yT,x:0,z:zT}); };
+const snapAfterRotate = ()=> { const yT=nearestFrontBack(angleY); const zT=isBack(yT)?nearestCardinal(angleZ):0; animateTo({y:yT,x:0,z:zT}); };
 
-    function shortestDelta(target,current){ let d=target-current; d=((d+180)%360)-180; return d; }
+// Pointer/touch
+const el = renderer.domElement;
+const pointers = new Map();
+let gStartAngle=0, gStartZ=0, pinchStart=0, pinchZoom0=zoomZ;
+const angleBetween=(a,b)=> Math.atan2(b.y-a.y,b.x-a.x);
+const dist=(a,b)=> Math.hypot(a.x-b.x,a.y-b.y);
 
-    function snapFrontBack(){
-      const n=((angleY%360)+360)%360;
-      const yTarget=(n<90)? angleY-n : (n<270? angleY+(180-n) : angleY+(360-n));
-      animateTo(yTarget,0,0);
-    }
+el.addEventListener('pointerdown', e=>{
+  if (animating) return;
+  el.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if (pointers.size===1){ isDragging=true; isRotating=false; didRotate=false; last.x=e.clientX; last.y=e.clientY; }
+  else if (pointers.size===2){
+    const [p1,p2]=[...pointers.values()];
+    gStartAngle=angleBetween(p1,p2); gStartZ=angleZ;
+    pinchStart=dist(p1,p2); pinchZoom0=zoomZ;
+    isDragging=false; isRotating=true; didRotate=false;
+  }
+});
+el.addEventListener('pointermove', e=>{
+  if (!pointers.has(e.pointerId) || animating) return;
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if (pointers.size===1 && isDragging){
+    const dx=e.clientX-last.x, dy=e.clientY-last.y; last.x=e.clientX; last.y=e.clientY;
+    angleY += dx*Y_SENS; angleX = THREE.MathUtils.clamp(angleX + dy*X_SENS, -X_LIMIT, X_LIMIT);
+  } else if (pointers.size===2 && isRotating){
+    const [p1,p2]=[...pointers.values()];
+    const d=dist(p1,p2); if (pinchStart>0){ const s=d/pinchStart; setZoom(pinchZoom0 + (1 - s)*3.0); }
+    const cur=angleBetween(p1,p2); const deltaDeg=THREE.MathUtils.radToDeg(cur - gStartAngle);
+    if (isBack(angleY)){ angleZ = norm(gStartZ + deltaDeg*ROT_SENS_Z); if (Math.abs(deltaDeg)>0.5) didRotate=true; }
+  }
+});
+function endPointer(e){
+  if(!pointers.has(e.pointerId)) return;
+  try{ el.releasePointerCapture(e.pointerId); }catch{}
+  pointers.delete(e.pointerId);
+  if (pointers.size===0){ const wasRotate=didRotate; isDragging=false; isRotating=false; didRotate=false; if (wasRotate) snapAfterRotate(); else snapAfterDrag(); }
+  else if (pointers.size===1){ const only=[...pointers.values()][0]; last.x=only.x; last.y=only.y; isDragging=true; isRotating=false; }
+}
+el.addEventListener('pointerup', endPointer);
+el.addEventListener('pointercancel', endPointer);
+el.addEventListener('pointerleave', endPointer);
 
-    function snapFourSides(){
-      const yTarget=180;
-      const zTarget=Math.round(angleZ/90)*90;
-      animateTo(yTarget,0,zTarget);
-    }
+// Wheel Zoom
+el.addEventListener('wheel', e=>{ const delta=(e.deltaY||0)*0.0015; setZoom(zoomZ + delta*3.0); e.preventDefault(); }, {passive:false});
 
-    function animateTo(yT,xT,zT){
-      const sY=angleY,sX=angleX,sZ=angleZ;
-      const dY=shortestDelta(yT,sY);
-      const dX=shortestDelta(xT,sX);
-      const dZ=shortestDelta(zT,sZ);
-      const dur=420,t0=performance.now();
-      function tick(t){
-        const p=Math.min(1,(t-t0)/dur);
-        const e=1-Math.pow(1-p,3);
-        angleY=sY+dY*e; angleX=sX+dX*e; angleZ=sZ+dZ*e;
-        render();
-        if(p<1) requestAnimationFrame(tick);
-      }
-      requestAnimationFrame(tick);
-    }
-
-    const el=renderer.domElement;
-    el.addEventListener('pointerdown',e=>{ isDragging=true; last.x=e.clientX; last.y=e.clientY; el.setPointerCapture(e.pointerId); });
-    el.addEventListener('pointermove',e=>{
-      if(!isDragging||isRotating) return;
-      const dx=e.clientX-last.x, dy=e.clientY-last.y; last.x=e.clientX; last.y=e.clientY;
-      angleY+=dx*0.25; angleX+=dy*0.25;
-    });
-    el.addEventListener('pointerup',e=>{ if(!isDragging) return; isDragging=false; el.releasePointerCapture(e.pointerId); if(!isRotating) snapFrontBack(); });
-
-    let pointers=new Map(); let rotateStartAngle=0; let rotateStartZ=0;
-    function angleBetween(a,b){ return Math.atan2(b.y-a.y, b.x-a.x); }
-
-    el.addEventListener('pointerdown',e=>{
-      pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-      if(pointers.size===2){
-        isRotating=true;
-        const [p1,p2]=[...pointers.values()];
-        rotateStartAngle=angleBetween(p1,p2);
-        rotateStartZ=angleZ;
-      }
-    });
-    el.addEventListener('pointermove',e=>{
-      if(!pointers.has(e.pointerId)) return;
-      pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-      if(pointers.size===2){
-        const [p1,p2]=[...pointers.values()];
-        const curr=angleBetween(p1,p2);
-        const delta=THREE.MathUtils.radToDeg(curr-rotateStartAngle);
-        angleZ=rotateStartZ+delta;
-      }
-    });
-    el.addEventListener('pointerup',e=>{
-      pointers.delete(e.pointerId);
-      if(pointers.size<2 && isRotating){ isRotating=false; snapFourSides(); }
-    });
-
-    window.addEventListener('resize',()=>{
-      renderer.setSize(window.innerWidth,window.innerHeight);
-      camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
-    });
-  </script>
+// Resize
+window.addEventListener('resize', ()=>{
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+});
+</script>
 </body>
 </html>
