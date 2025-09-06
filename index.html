@@ -7,11 +7,9 @@
   <style>
     html, body { height: 100%; margin: 0; background: #000; }
     canvas { width: 100%; height: 100%; display: block; touch-action: none; }
-    .hint{position:fixed;left:12px;top:12px;color:#fff;font:600 12px system-ui,-apple-system,Segoe UI,Roboto;opacity:.75;user-select:none}
   </style>
 </head>
 <body>
-  <div class="hint">Drag: Front/Back • 2-Finger drehen: Rückseite um Z • Pinch: Zoom • ?guest=1..14 oder ?back=filename.png</div>
 
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
@@ -45,25 +43,25 @@
     function setZoom(z){ zoomZ = THREE.MathUtils.clamp(z, Z_MIN, Z_MAX); }
     camera.position.set(0, 0, zoomZ);
 
-    // ===== Beleuchtung (starr, sehr breit & weich) =====
+    // ===== Beleuchtung (extrem weich und streuend) =====
     // sanftes "globales" Licht: Himmel/Erde
     const hemi = new THREE.HemisphereLight(0xffffff, 0x222222, 0.35);
     scene.add(hemi);
 
-    // Key-Spot: sehr großer Winkel, volle Penumbra, langsames Decay → breite Streuung
-    const key = new THREE.SpotLight(0xffffff, 1.2, 30.0, /*angle*/ 1.45, /*penumbra*/ 1.0, /*decay*/ 1.0);
+    // Key-Spot: extrem breiter Kegel, volle Penumbra, langsames Decay → maximal streuend
+    const key = new THREE.SpotLight(0xffffff, 1.5, 60.0, /*angle*/ 1.7, /*penumbra*/ 1.0, /*decay*/ 1.0);
     key.position.set(1.6, 1.2, 2.2);
     key.target.position.set(0, 0.05, 0);
     scene.add(key); scene.add(key.target);
 
-    // Fill-Spot: noch etwas breiter, schwächer
-    const fill = new THREE.SpotLight(0xffffff, 0.9, 30.0, 1.50, 1.0, 1.0);
+    // Fill-Spot: noch breiter und schwächer
+    const fill = new THREE.SpotLight(0xffffff, 1.0, 60.0, 1.75, 1.0, 1.0);
     fill.position.set(-1.4, 0.8, 1.8);
     fill.target.position.set(0, 0.0, 0);
     scene.add(fill); scene.add(fill.target);
 
-    // Sehr sanfter Rim von hinten
-    const rim = new THREE.SpotLight(0xffffff, 0.45, 30.0, 1.20, 1.0, 1.0);
+    // Sehr sanfter Rim-Licht von hinten
+    const rim = new THREE.SpotLight(0xffffff, 0.45, 60.0, 1.3, 1.0, 1.0);
     rim.position.set(0.6, 1.0, -2.2);
     rim.target.position.set(0, 0.0, 0);
     scene.add(rim); scene.add(rim.target);
