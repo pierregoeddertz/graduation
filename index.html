@@ -45,24 +45,26 @@
     function setZoom(z){ zoomZ = THREE.MathUtils.clamp(z, Z_MIN, Z_MAX); }
     camera.position.set(0, 0, zoomZ);
 
-    // ===== Beleuchtung (starr, weicher & breiter gestreut) =====
-    scene.add(new THREE.AmbientLight(0xffffff, 0.25)); // dezentes Grundlicht
+    // ===== Beleuchtung (starr, sehr breit & weich) =====
+    // sanftes "globales" Licht: Himmel/Erde
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x222222, 0.35);
+    scene.add(hemi);
 
-    // Key-Spot: breiterer Kegel + volle Penumbra
-    const key = new THREE.SpotLight(0xffffff, 1.8, 12.0, /*angle*/ 1.25, /*penumbra*/ 1.0, /*decay*/ 2);
+    // Key-Spot: sehr großer Winkel, volle Penumbra, langsames Decay → breite Streuung
+    const key = new THREE.SpotLight(0xffffff, 1.2, 30.0, /*angle*/ 1.45, /*penumbra*/ 1.0, /*decay*/ 1.0);
     key.position.set(1.6, 1.2, 2.2);
     key.target.position.set(0, 0.05, 0);
     scene.add(key); scene.add(key.target);
 
-    // Fill-Spot: noch breiter, etwas schwächer
-    const fill = new THREE.SpotLight(0xffffff, 1.0, 12.0, 1.35, 1.0, 2);
+    // Fill-Spot: noch etwas breiter, schwächer
+    const fill = new THREE.SpotLight(0xffffff, 0.9, 30.0, 1.50, 1.0, 1.0);
     fill.position.set(-1.4, 0.8, 1.8);
     fill.target.position.set(0, 0.0, 0);
     scene.add(fill); scene.add(fill.target);
 
-    // Sehr sanftes Rim von hinten
-    const rim = new THREE.SpotLight(0xffffff, 0.5, 14.0, 1.1, 1.0, 2);
-    rim.position.set(0.6, 1.0, -2.0);
+    // Sehr sanfter Rim von hinten
+    const rim = new THREE.SpotLight(0xffffff, 0.45, 30.0, 1.20, 1.0, 1.0);
+    rim.position.set(0.6, 1.0, -2.2);
     rim.target.position.set(0, 0.0, 0);
     scene.add(rim); scene.add(rim.target);
 
@@ -71,7 +73,7 @@
     const H = W * (15.52 / 9.0);    // exakte Ratio 9:15.52
     const thickness = 0.01;
 
-    // Schwarze Kanten (dunkel, matt)
+    // Schwarze, matte Kanten/Seitenfläche
     const edgeMat = new THREE.MeshStandardMaterial({
       color: 0x000000,
       metalness: 0.0,
@@ -87,13 +89,13 @@
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
 
-      // Weicher, breiter Glanz
+      // Weit gestreute, weiche Glanzlichter
       return new THREE.MeshPhysicalMaterial({
         map: tex,
         metalness: 0.0,
-        roughness: 0.66,          // etwas weicher/breiter
+        roughness: 0.70,          // weicher/breiter
         clearcoat: 1.0,
-        clearcoatRoughness: 0.22  // breitere Highlights
+        clearcoatRoughness: 0.28  // breitere Highlights
       });
     }
 
@@ -125,8 +127,7 @@
 
     // ===== Render =====
     function render(){
-      // sanfter Zoom
-      camera.position.z += (zoomZ - camera.position.z) * 0.18;
+      camera.position.z += (zoomZ - camera.position.z) * 0.18; // sanfter Zoom
 
       // Winkel clamp/normalize
       angleY = norm(angleY); angleZ = norm(angleZ);
