@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>3D Karte – GitHub Pages (Query-Param Bilder)</title>
   <style>
-    html, body { height: 100%; margin: 0; background: #fff; }
+    html, body { height: 100%; margin: 0; background: #000; }
     canvas { width: 100%; height: 100%; display: block; touch-action: none; }
-    .hint{position:fixed;left:12px;top:12px;color:#111;font:600 12px system-ui,-apple-system,Segoe UI,Roboto;opacity:.6;user-select:none}
+    .hint{position:fixed;left:12px;top:12px;color:#fff;font:600 12px system-ui,-apple-system,Segoe UI,Roboto;opacity:.7;user-select:none}
   </style>
 </head>
 <body>
@@ -32,7 +32,7 @@
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setClearColor(0xffffff, 1); // Hintergrund weiß
+    renderer.setClearColor(0x000000, 1); // Hintergrund schwarz
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
@@ -45,18 +45,33 @@
     function setZoom(z){ zoomZ = THREE.MathUtils.clamp(z, Z_MIN, Z_MAX); }
     camera.position.set(0, 0, zoomZ);
 
-    // Beleuchtung
-    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
-    const key = new THREE.DirectionalLight(0xffffff, 0.9); key.position.set(1,1.2,1); scene.add(key);
+    // ===== Beleuchtung (starr, weich & breit) =====
+    scene.add(new THREE.AmbientLight(0xffffff, 0.25)); // dezentes Grundlicht
 
-    // Bewegtes Punktlicht für sichtbare Glanzlichter auf den Bildern
-    const specLight = new THREE.PointLight(0xffffff, 2.2, 10.0);
-    specLight.position.set(1.6, 1.2, 2.2);
-    scene.add(specLight);
+    // Key-Spot: breit (großer Winkel), weiche Randzone (penumbra)
+    const key = new THREE.SpotLight(0xffffff, 2.0, 10.0, /*angle*/ 1.0, /*penumbra*/ 1.0, /*decay*/ 2);
+    key.position.set(1.6, 1.2, 2.2);
+    key.target.position.set(0, 0.05, 0);
+    scene.add(key);
+    scene.add(key.target);
+
+    // Fill-Spot: etwas schwächer, von links vorn
+    const fill = new THREE.SpotLight(0xffffff, 1.2, 10.0, 1.1, 1.0, 2);
+    fill.position.set(-1.4, 0.8, 1.8);
+    fill.target.position.set(0, 0.0, 0);
+    scene.add(fill);
+    scene.add(fill.target);
+
+    // Optional: leichtes Rim-Licht von hinten, sehr schwach
+    const rim = new THREE.SpotLight(0xffffff, 0.6, 12.0, 0.9, 1.0, 2);
+    rim.position.set(0.6, 1.0, -2.0);
+    rim.target.position.set(0, 0.0, 0);
+    scene.add(rim);
+    scene.add(rim.target);
 
     // ===== Karte (9 : 15.52) =====
-    const W = 0.90;                 // beliebige Basisbreite
-    const H = W * (15.52 / 9.0);    // exakte Ratio
+    const W = 0.90;                 // Basisbreite
+    const H = W * (15.52 / 9.0);    // exakte Ratio 9:15.52
     const thickness = 0.01;
 
     const edgeMat = new THREE.MeshStandardMaterial({ color: 0xcfcfcf, metalness: 0.2, roughness: 0.85 });
@@ -70,13 +85,13 @@
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
 
-      // Glänzende, laminierte Bildoberfläche
+      // Weicher, breiter Glanz → etwas höhere roughness & clearcoatRoughness
       return new THREE.MeshPhysicalMaterial({
         map: tex,
         metalness: 0.0,
-        roughness: 0.55,        // Grundrauhigkeit
-        clearcoat: 1.0,         // Lackschicht für knackige Highlights
-        clearcoatRoughness: 0.08
+        roughness: 0.62,          // breiterer, weicherer Glanz
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.18  // weicherer Clearcoat-Highlight
       });
     }
 
@@ -107,14 +122,9 @@
     const ROT_SENS_Z = 1.0;
 
     // ===== Render =====
-    const t0 = performance.now();
     function render(){
       // sanfter Zoom
       camera.position.z += (zoomZ - camera.position.z) * 0.18;
-
-      // wanderndes Glanzlicht
-      const t = (performance.now() - t0) * 0.001;
-      specLight.position.set(Math.cos(t)*1.6, 1.2 + Math.sin(t*0.8)*0.4, 2.2 + Math.sin(t*1.4)*0.6);
 
       // Winkel clamp/normalize
       angleY = norm(angleY); angleZ = norm(angleZ);
