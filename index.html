@@ -7,7 +7,7 @@
   <style>
     html, body { height: 100%; margin: 0; background: #000; }
     canvas { width: 100%; height: 100%; display: block; touch-action: none; }
-    .hint{position:fixed;left:12px;top:12px;color:#fff;font:600 12px system-ui,-apple-system,Segoe UI,Roboto;opacity:.7;user-select:none}
+    .hint{position:fixed;left:12px;top:12px;color:#fff;font:600 12px system-ui,-apple-system,Segoe UI,Roboto;opacity:.75;user-select:none}
   </style>
 </head>
 <body>
@@ -45,36 +45,38 @@
     function setZoom(z){ zoomZ = THREE.MathUtils.clamp(z, Z_MIN, Z_MAX); }
     camera.position.set(0, 0, zoomZ);
 
-    // ===== Beleuchtung (starr, weich & breit) =====
+    // ===== Beleuchtung (starr, weicher & breiter gestreut) =====
     scene.add(new THREE.AmbientLight(0xffffff, 0.25)); // dezentes Grundlicht
 
-    // Key-Spot: breit (großer Winkel), weiche Randzone (penumbra)
-    const key = new THREE.SpotLight(0xffffff, 2.0, 10.0, /*angle*/ 1.0, /*penumbra*/ 1.0, /*decay*/ 2);
+    // Key-Spot: breiterer Kegel + volle Penumbra
+    const key = new THREE.SpotLight(0xffffff, 1.8, 12.0, /*angle*/ 1.25, /*penumbra*/ 1.0, /*decay*/ 2);
     key.position.set(1.6, 1.2, 2.2);
     key.target.position.set(0, 0.05, 0);
-    scene.add(key);
-    scene.add(key.target);
+    scene.add(key); scene.add(key.target);
 
-    // Fill-Spot: etwas schwächer, von links vorn
-    const fill = new THREE.SpotLight(0xffffff, 1.2, 10.0, 1.1, 1.0, 2);
+    // Fill-Spot: noch breiter, etwas schwächer
+    const fill = new THREE.SpotLight(0xffffff, 1.0, 12.0, 1.35, 1.0, 2);
     fill.position.set(-1.4, 0.8, 1.8);
     fill.target.position.set(0, 0.0, 0);
-    scene.add(fill);
-    scene.add(fill.target);
+    scene.add(fill); scene.add(fill.target);
 
-    // Optional: leichtes Rim-Licht von hinten, sehr schwach
-    const rim = new THREE.SpotLight(0xffffff, 0.6, 12.0, 0.9, 1.0, 2);
+    // Sehr sanftes Rim von hinten
+    const rim = new THREE.SpotLight(0xffffff, 0.5, 14.0, 1.1, 1.0, 2);
     rim.position.set(0.6, 1.0, -2.0);
     rim.target.position.set(0, 0.0, 0);
-    scene.add(rim);
-    scene.add(rim.target);
+    scene.add(rim); scene.add(rim.target);
 
     // ===== Karte (9 : 15.52) =====
     const W = 0.90;                 // Basisbreite
     const H = W * (15.52 / 9.0);    // exakte Ratio 9:15.52
     const thickness = 0.01;
 
-    const edgeMat = new THREE.MeshStandardMaterial({ color: 0xcfcfcf, metalness: 0.2, roughness: 0.85 });
+    // Schwarze Kanten (dunkel, matt)
+    const edgeMat = new THREE.MeshStandardMaterial({
+      color: 0x000000,
+      metalness: 0.0,
+      roughness: 0.9
+    });
 
     const loader = new THREE.TextureLoader();
     loader.crossOrigin = 'anonymous';
@@ -85,13 +87,13 @@
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
 
-      // Weicher, breiter Glanz → etwas höhere roughness & clearcoatRoughness
+      // Weicher, breiter Glanz
       return new THREE.MeshPhysicalMaterial({
         map: tex,
         metalness: 0.0,
-        roughness: 0.62,          // breiterer, weicherer Glanz
+        roughness: 0.66,          // etwas weicher/breiter
         clearcoat: 1.0,
-        clearcoatRoughness: 0.18  // weicherer Clearcoat-Highlight
+        clearcoatRoughness: 0.22  // breitere Highlights
       });
     }
 
@@ -190,9 +192,7 @@
         angleX = THREE.MathUtils.clamp(angleX + dy * X_SENS, -X_LIMIT, X_LIMIT);
       } else if(pointers.size===2 && isRotating){
         const [p1,p2]=[...pointers.values()];
-        // Pinch (Zoom)
         const d = dist(p1,p2); if (pinchStart>0){ const scale=d/pinchStart; setZoom(pinchZoom0 + (1 - scale) * 3.0); }
-        // Twist (nur Back erlaubt)
         const cur = angleBetween(p1,p2);
         const deltaDeg = THREE.MathUtils.radToDeg(cur - gStartAngle);
         if (isBack(angleY)) { angleZ = norm(gStartZ + deltaDeg * ROT_SENS_Z); if(Math.abs(deltaDeg)>0.5) didRotate = true; }
