@@ -12,14 +12,11 @@
   </style>
 </head>
 <body>
-  <div class="hint">Drag: Front/Back • 2‑Finger drehen: Rückseite um Z • Pinch: Zoom • ?guest=1..14 oder ?back=filename.png</div>
+  <div class="hint">Drag: Front/Back • 2-Finger drehen: Rückseite um Z • Pinch: Zoom • ?guest=1..14 oder ?back=filename.png</div>
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 
     // ===== Konfiguration für GitHub Pages =====
-    // Lege in deinem Repo zwei Ordner an:
-    //   /assets/front.png (immer gleich)
-    //   /assets/backs/back-01.png ... back-14.png (je Gast)
     const FRONT_SRC = './assets/front.png';
     const DEFAULT_BACK_SRC = './assets/backs/back-01.png';
 
@@ -35,6 +32,7 @@
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0xffffff, 1); // Hintergrund weiß
     document.body.appendChild(renderer.domElement);
 
     // ===== Scene & Camera =====
@@ -70,25 +68,25 @@
     const cardGroup = new THREE.Group(); cardGroup.add(cardMesh); scene.add(cardGroup);
 
     // ===== Math/Helpers =====
-    const norm = (deg)=> THREE.MathUtils.euclideanModulo(deg + 180, 360) - 180; // [-180,180)
+    const norm = (deg)=> THREE.MathUtils.euclideanModulo(deg + 180, 360) - 180;
     const shortest = (from,to)=> norm(to - from);
-    const isBack = (y)=> Math.abs(norm(y)) > 179.5; // ~180°
+    const isBack = (y)=> Math.abs(norm(y)) > 179.5;
     const nearestFrontBack = (y)=> { const n=norm(y); return Math.abs(n)<=90?0:(n>0?180:-180); };
     const nearestCardinal = (z)=> { const n = THREE.MathUtils.euclideanModulo(z,360); const opts=[0,90,180,270]; let best=0,b=1e9; for(const o of opts){ const d=Math.min(Math.abs(n-o),Math.abs(n-o+360),Math.abs(n-o-360)); if(d<b){b=d;best=o;} } return best; };
 
     // ===== State =====
-    let angleX = 0, angleY = 0, angleZ = 0; // Grad
+    let angleX = 0, angleY = 0, angleZ = 0;
     let animating = false;
 
     // Gesten-Parameter
-    const Y_SENS = 0.65;    // schneller Flip per Drag
-    const X_SENS = 0.18;    // leichtes Kippen
-    const X_LIMIT = 20;     // max ±°
-    const ROT_SENS_Z = 1.0; // Rotate-Geste 1:1
+    const Y_SENS = 0.65;
+    const X_SENS = 0.18;
+    const X_LIMIT = 20;
+    const ROT_SENS_Z = 1.0;
 
     // ===== Render =====
     function render(){
-      camera.position.z += (zoomZ - camera.position.z) * 0.18; // sanfte Annäherung
+      camera.position.z += (zoomZ - camera.position.z) * 0.18;
       angleY = norm(angleY); angleZ = norm(angleZ);
       angleX = THREE.MathUtils.clamp(angleX, -X_LIMIT, X_LIMIT);
       cardGroup.rotation.set(
@@ -103,12 +101,12 @@
     // ===== Snapping =====
     function snapAfterDrag(){
       const yT = nearestFrontBack(angleY);
-      const zT = isBack(yT) ? angleZ : 0; // Front immer Z=0
+      const zT = isBack(yT) ? angleZ : 0;
       animateTo({ y: yT, x: 0, z: zT });
     }
     function snapAfterRotate(){
       const yT = nearestFrontBack(angleY);
-      const zT = isBack(yT) ? nearestCardinal(angleZ) : 0; // Back: 0/90/180/270
+      const zT = isBack(yT) ? nearestCardinal(angleZ) : 0;
       animateTo({ y: yT, x: 0, z: zT });
     }
     function animateTo({ y, x, z }){
@@ -127,7 +125,7 @@
     // ===== Gesten (Pointer) =====
     const el = renderer.domElement;
     const pointers = new Map();
-    let isDragging=false, isRotating=false, didRotate=false; // didRotate → entscheidet, welcher Snap
+    let isDragging=false, isRotating=false, didRotate=false;
     let last = { x:0, y:0 };
     let gStartAngle=0, gStartZ=0, pinchStart=0, pinchZoom0=zoomZ;
     const angleBetween=(a,b)=> Math.atan2(b.y-a.y,b.x-a.x);
@@ -146,13 +144,11 @@
       pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
       if(pointers.size===1 && isDragging){
         const dx=e.clientX-last.x, dy=e.clientY-last.y; last.x=e.clientX; last.y=e.clientY;
-        angleY += dx * Y_SENS; // schneller Flip
+        angleY += dx * Y_SENS;
         angleX = THREE.MathUtils.clamp(angleX + dy * X_SENS, -X_LIMIT, X_LIMIT);
       } else if(pointers.size===2 && isRotating){
         const [p1,p2]=[...pointers.values()];
-        // Pinch
         const d = dist(p1,p2); if (pinchStart>0){ const scale=d/pinchStart; setZoom(pinchZoom0 + (1 - scale) * 3.0); }
-        // Twist (nur Back erlaubt)
         const cur = angleBetween(p1,p2);
         const deltaDeg = THREE.MathUtils.radToDeg(cur - gStartAngle);
         if (isBack(angleY)) { angleZ = norm(gStartZ + deltaDeg * ROT_SENS_Z); if(Math.abs(deltaDeg)>0.5) didRotate = true; }
