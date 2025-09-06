@@ -226,7 +226,7 @@
     el.addEventListener('pointercancel', endPointer);
     el.addEventListener('pointerleave', endPointer);
 
-    // Trackpad/Mausrad Zoom
+    // Tfrackpad/Mausrad Zoom
     el.addEventListener('wheel', (e)=>{ const delta=(e.deltaY||0)*0.0015; setZoom(zoomZ + delta * 3.0); e.preventDefault(); }, { passive:false });
 
     // Resize
