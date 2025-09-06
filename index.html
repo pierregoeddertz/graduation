@@ -25,10 +25,41 @@
     const key = new THREE.DirectionalLight(0xffffff, 0.6); key.position.set(1, 1.2, 1); scene.add(key);
     const rim = new THREE.DirectionalLight(0xffffff, 0.25); rim.position.set(-1, -0.3, -1); scene.add(rim);
 
-    const cardW=1.0, cardH=1.5, thickness=0.01;
+    const ASPECT_W = 9, ASPECT_H = 15.52; // Breite:Höhe
+    const cardH = 1.5;                          // Basis-Höhe (beliebig skalierbar)
+    const cardW = cardH * (ASPECT_W / ASPECT_H); // ergibt 9:15.52-Format
+    const thickness = 0.01;
+    // --- Materialien: Kante dunkel, Front/Back als Texturen über Query-Param ---
     const sideMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.3, roughness: 0.6 });
-    const frontMat = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, metalness: 0.2, roughness: 0.65 });
-    const backMat  = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, metalness: 0.2, roughness: 0.65 });
+
+    // GitHub Pages: Bilder unter ./assets/
+    const FRONT_SRC = './assets/front.png';
+    const DEFAULT_BACK_SRC = './assets/backs/back-01.png';
+
+    // Query: ?guest=01..14  ODER  ?back=backs/name.png
+    const q = new URLSearchParams(location.search);
+    const guest = q.get('guest');
+    const backParam = q.get('back');
+    const backSrc = backParam
+      ? (backParam.startsWith('./') || backParam.startsWith('http') ? backParam : `./assets/${backParam}`)
+      : (guest ? `./assets/backs/back-${String(guest).padStart(2,'0')}.png` : DEFAULT_BACK_SRC);
+
+    const loader = new THREE.TextureLoader();
+
+    function faceMat(url){
+      const tex = loader.load(url);
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy?.() || 1;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      return new THREE.MeshBasicMaterial({ map: tex });
+    }
+
+    const frontMat = faceMat(FRONT_SRC);
+    const backMat  = faceMat(backSrc);
+    // Back-UV-Korrektur: horizontal spiegeln, damit Schrift/Design nicht gespiegelt wirkt
+    backMat.map.wrapS = THREE.RepeatWrapping;
+    backMat.map.repeat.x = -1;
+    backMat.map.offset.x = 1;
     const mats=[sideMat,sideMat,sideMat,sideMat,frontMat,backMat];
     const cardMesh=new THREE.Mesh(new THREE.BoxGeometry(cardW,cardH,thickness),mats);
 
