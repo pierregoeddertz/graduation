@@ -3,199 +3,179 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>3D Karte – sichtbar, Licht & HQ-Texturen</title>
+  <title>3D Karte – GitHub Pages (Query-Param Bilder)</title>
   <style>
     html, body { height: 100%; margin: 0; background: #fff; }
-    canvas { width: 100%; height: 100%; display: block; touch-action: none; background: #fff; }
+    canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+    /* optionale Mini-Hilfe oben links */
+    .hint{position:fixed;left:12px;top:12px;color:#fff;font:600 12px system-ui, -apple-system, Segoe UI, Roboto;opacity:.6;user-select:none}
   </style>
 </head>
 <body>
-<script type="module">
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-import { RoomEnvironment } from 'https://unpkg.com/three@0.160.0/examples/jsm/environments/RoomEnvironment.js';
+  <div class="hint">Drag: Front/Back • 2‑Finger drehen: Rückseite um Z • Pinch: Zoom • ?guest=1..14 oder ?back=filename.png</div>
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setClearColor(0x000000, 1);
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.3;
-renderer.physicallyCorrectLights = true;
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+    // ===== Konfiguration für GitHub Pages =====
+    // Lege in deinem Repo zwei Ordner an:
+    //   /assets/front.png (immer gleich)
+    //   /assets/backs/back-01.png ... back-14.png (je Gast)
+    const FRONT_SRC = './assets/front.png';
+    const DEFAULT_BACK_SRC = './assets/backs/back-01.png';
 
-// Scene / Camera
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(35, window.innerWidth/window.innerHeight, 0.1, 100);
-camera.position.set(0,0,4);
-camera.lookAt(0,0,0);
-let zoomZ = 4; const Z_MIN = 2.4, Z_MAX = 7.6;
-const setZoom = z => zoomZ = THREE.MathUtils.clamp(z, Z_MIN, Z_MAX);
+    // Query-Params: ?guest=7  ODER  ?back=backs/custom.png
+    const q = new URLSearchParams(location.search);
+    const guest = q.get('guest');
+    const backParam = q.get('back');
+    const backSrc = backParam
+      ? (backParam.startsWith('./') || backParam.startsWith('http') ? backParam : `./assets/${backParam}`)
+      : (guest ? `./assets/backs/back-${String(guest).padStart(2,'0')}.png` : DEFAULT_BACK_SRC);
 
-// Env + Lights (heller, sichtbarer)
-const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    // ===== Renderer =====
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
 
-const amb = new THREE.AmbientLight(0xffffff, 0.32);
-const key = new THREE.DirectionalLight(0xffffff, 1.25); key.position.set(1.6, 1.6, 1.2);
-const rim = new THREE.DirectionalLight(0xffffff, 0.60); rim.position.set(-1.2, -0.2, -1.4);
-scene.add(amb, key, rim);
+    // ===== Scene & Camera =====
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(35, window.innerWidth/window.innerHeight, 0.1, 100);
+    let zoomZ = 4; const Z_MIN = 2.4, Z_MAX = 7.6;
+    function setZoom(z){ zoomZ = THREE.MathUtils.clamp(z, Z_MIN, Z_MAX); }
+    camera.position.set(0, 0, zoomZ);
 
-// Card geometry (9:15.52)
-const ASPECT_W = 9, ASPECT_H = 15.52;
-const cardH = 1.5;
-const cardW = cardH * (ASPECT_W / ASPECT_H);
-const thickness = 0.01;
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+    const key = new THREE.DirectionalLight(0xffffff, 0.9); key.position.set(1,1.2,1); scene.add(key);
 
-// Texture sources via query
-const FRONT_SRC = './assets/front.png';
-const DEFAULT_BACK_SRC = './assets/backs/back-01.png';
-const q = new URLSearchParams(location.search);
-const guest = q.get('guest');
-const backParam = q.get('back');
-const backSrc = backParam
-  ? (backParam.startsWith('./') || backParam.startsWith('http') ? backParam : `./assets/${backParam}`)
-  : (guest ? `./assets/backs/back-${String(guest).padStart(2,'0')}.png` : DEFAULT_BACK_SRC);
+    // ===== Karte =====
+    const cardW = 1.0, cardH = 1.5, thickness = 0.01;
+    const edgeMat = new THREE.MeshStandardMaterial({ color: 0xcfcfcf, metalness: 0.2, roughness: 0.85 });
 
-// Loader with robust onLoad/onError
-const loader = new THREE.TextureLoader();
-function loadTextureHQ(url, onOk){
-  const tex = loader.load(url, () => { if (onOk) onOk(); }, undefined, () => {
-    console.warn('Bild nicht gefunden:', url);
-  });
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.generateMipmaps = true;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  tex.anisotropy = renderer.capabilities.getMaxAnisotropy?.() || 8;
-  tex.wrapS = THREE.ClampToEdgeWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
-  return tex;
-}
+    const loader = new THREE.TextureLoader();
+    loader.crossOrigin = 'anonymous';
 
-// Materials – mit Emissive & Fallback-Farbe (immer sichtbar)
-const sideMat = new THREE.MeshStandardMaterial({
-  color: 0x141414, metalness: 0.3, roughness: 0.55, envMapIntensity: 0.7,
-  emissive: 0x070707, emissiveIntensity: 0.6
-});
-const frontTex = loadTextureHQ(FRONT_SRC);
-const backTex  = loadTextureHQ(backSrc);
-backTex.wrapS = THREE.RepeatWrapping; backTex.repeat.x = -1; backTex.offset.x = 1;
+    function makeFaceMat(url){
+      const tex = loader.load(url);
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy?.() || 1;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      return new THREE.MeshBasicMaterial({ map: tex });
+    }
 
-const frontMat = new THREE.MeshStandardMaterial({
-  color: 0x262626, map: frontTex, metalness: 0.15, roughness: 0.55, envMapIntensity: 0.8,
-  emissive: 0x0a0a0a, emissiveIntensity: 0.5
-});
-const backMat  = new THREE.MeshStandardMaterial({
-  color: 0x262626, map: backTex,  metalness: 0.15, roughness: 0.55, envMapIntensity: 0.8,
-  emissive: 0x0a0a0a, emissiveIntensity: 0.5
-});
+    const frontMat = makeFaceMat(FRONT_SRC);
+    const backMat  = makeFaceMat(backSrc);
+    const mats = [edgeMat, edgeMat, edgeMat, edgeMat, frontMat, backMat]; // px,nx,py,ny,pz(front),nz(back)
 
-const mats = [sideMat, sideMat, sideMat, sideMat, frontMat, backMat];
-const cardMesh = new THREE.Mesh(new THREE.BoxGeometry(cardW, cardH, thickness), mats);
+    const cardMesh = new THREE.Mesh(new THREE.BoxGeometry(cardW, cardH, thickness), mats);
+    const cardGroup = new THREE.Group(); cardGroup.add(cardMesh); scene.add(cardGroup);
 
-// Dünne weiße Kanten (nur zur Sichtbarkeit – bei Bedarf entfernen)
-{
-  const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(cardW, cardH, thickness));
-  const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.2, transparent: true }));
-  cardMesh.add(line);
-}
+    // ===== Math/Helpers =====
+    const norm = (deg)=> THREE.MathUtils.euclideanModulo(deg + 180, 360) - 180; // [-180,180)
+    const shortest = (from,to)=> norm(to - from);
+    const isBack = (y)=> Math.abs(norm(y)) > 179.5; // ~180°
+    const nearestFrontBack = (y)=> { const n=norm(y); return Math.abs(n)<=90?0:(n>0?180:-180); };
+    const nearestCardinal = (z)=> { const n = THREE.MathUtils.euclideanModulo(z,360); const opts=[0,90,180,270]; let best=0,b=1e9; for(const o of opts){ const d=Math.min(Math.abs(n-o),Math.abs(n-o+360),Math.abs(n-o-360)); if(d<b){b=d;best=o;} } return best; };
 
-const cardGroup = new THREE.Group();
-cardGroup.add(cardMesh);
-scene.add(cardGroup);
+    // ===== State =====
+    let angleX = 0, angleY = 0, angleZ = 0; // Grad
+    let animating = false;
 
-// Helpers
-const norm = deg => THREE.MathUtils.euclideanModulo(deg + 180, 360) - 180; // [-180,180)
-const shortest = (from,to) => norm(to - from);
-const isBack = y => Math.abs(norm(y)) > 179.5;
-const nearestFrontBack = y => { const n=norm(y); return Math.abs(n)<=90?0:(n>0?180:-180); };
-const nearestCardinal = z => {
-  const n = THREE.MathUtils.euclideanModulo(z,360); const opts=[0,90,180,270];
-  let best=0,b=1e9; for(const o of opts){ const d=Math.min(Math.abs(n-o),Math.abs(n-o+360),Math.abs(n-o-360)); if(d<b){b=d;best=o;} }
-  return best;
-};
+    // Gesten-Parameter
+    const Y_SENS = 0.65;    // schneller Flip per Drag
+    const X_SENS = 0.18;    // leichtes Kippen
+    const X_LIMIT = 20;     // max ±°
+    const ROT_SENS_Z = 1.0; // Rotate-Geste 1:1
 
-// Interaction
-let angleX=0, angleY=0, angleZ=0;
-let animating=false, isDragging=false, isRotating=false, didRotate=false;
-let last={x:0,y:0};
-const Y_SENS=0.65, X_SENS=0.18, X_LIMIT=20, ROT_SENS_Z=1.0;
+    // ===== Render =====
+    function render(){
+      camera.position.z += (zoomZ - camera.position.z) * 0.18; // sanfte Annäherung
+      angleY = norm(angleY); angleZ = norm(angleZ);
+      angleX = THREE.MathUtils.clamp(angleX, -X_LIMIT, X_LIMIT);
+      cardGroup.rotation.set(
+        THREE.MathUtils.degToRad(angleX),
+        THREE.MathUtils.degToRad(angleY),
+        THREE.MathUtils.degToRad(angleZ)
+      );
+      renderer.render(scene, camera);
+    }
+    renderer.setAnimationLoop(render);
 
-function render(){
-  camera.position.z += (zoomZ - camera.position.z) * 0.18;
-  angleY = norm(angleY); angleZ = norm(angleZ);
-  angleX = THREE.MathUtils.clamp(angleX, -X_LIMIT, X_LIMIT);
-  cardGroup.rotation.set(THREE.MathUtils.degToRad(angleX),THREE.MathUtils.degToRad(angleY),THREE.MathUtils.degToRad(angleZ));
-  renderer.render(scene,camera);
-}
-renderer.setAnimationLoop(render);
+    // ===== Snapping =====
+    function snapAfterDrag(){
+      const yT = nearestFrontBack(angleY);
+      const zT = isBack(yT) ? angleZ : 0; // Front immer Z=0
+      animateTo({ y: yT, x: 0, z: zT });
+    }
+    function snapAfterRotate(){
+      const yT = nearestFrontBack(angleY);
+      const zT = isBack(yT) ? nearestCardinal(angleZ) : 0; // Back: 0/90/180/270
+      animateTo({ y: yT, x: 0, z: zT });
+    }
+    function animateTo({ y, x, z }){
+      animating = true;
+      const sY=angleY,sX=angleX,sZ=angleZ;
+      const dY=shortest(sY,y), dX=shortest(sX,x), dZ=shortest(sZ,(z??sZ));
+      const dur=420, t0=performance.now();
+      (function tick(t){
+        const p=Math.min(1,(t-t0)/dur);
+        const e=1-Math.pow(1-p,3);
+        angleY=sY+dY*e; angleX=sX+dX*e; angleZ=sZ+dZ*e;
+        if(p<1) requestAnimationFrame(tick); else { angleY=y; angleX=x; angleZ=(z??sZ); if(!isBack(angleY)) angleZ=0; animating=false; }
+      })(performance.now());
+    }
 
-// Snapping
-function animateTo({ y, x, z }){
-  animating = true;
-  const sY=angleY,sX=angleX,sZ=angleZ;
-  const dY=shortest(sY,y), dX=shortest(sX,x), dZ=shortest(sZ,(z??sZ));
-  const dur=420, t0=performance.now();
-  (function tick(t){
-    const p=Math.min(1,(t-t0)/dur), e=1-Math.pow(1-p,3);
-    angleY=sY+dY*e; angleX=sX+dX*e; angleZ=sZ+dZ*e;
-    if(p<1) requestAnimationFrame(tick); else { angleY=y; angleX=x; angleZ=(z??sZ); if(!isBack(angleY)) angleZ=0; animating=false; }
-  })(performance.now());
-}
-const snapAfterDrag   = ()=> { const yT=nearestFrontBack(angleY); const zT=isBack(yT)?angleZ:0;         animateTo({y:yT,x:0,z:zT}); };
-const snapAfterRotate = ()=> { const yT=nearestFrontBack(angleY); const zT=isBack(yT)?nearestCardinal(angleZ):0; animateTo({y:yT,x:0,z:zT}); };
+    // ===== Gesten (Pointer) =====
+    const el = renderer.domElement;
+    const pointers = new Map();
+    let isDragging=false, isRotating=false, didRotate=false; // didRotate → entscheidet, welcher Snap
+    let last = { x:0, y:0 };
+    let gStartAngle=0, gStartZ=0, pinchStart=0, pinchZoom0=zoomZ;
+    const angleBetween=(a,b)=> Math.atan2(b.y-a.y,b.x-a.x);
+    const dist=(a,b)=> Math.hypot(a.x-b.x,a.y-b.y);
 
-// Pointer/touch
-const el = renderer.domElement;
-const pointers = new Map();
-let gStartAngle=0, gStartZ=0, pinchStart=0, pinchZoom0=zoomZ;
-const angleBetween=(a,b)=> Math.atan2(b.y-a.y,b.x-a.x);
-const dist=(a,b)=> Math.hypot(a.x-b.x,a.y-b.y);
+    el.addEventListener('pointerdown', (e)=>{
+      if (animating) return;
+      el.setPointerCapture(e.pointerId);
+      pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+      if(pointers.size===1){ isDragging=true; isRotating=false; didRotate=false; last.x=e.clientX; last.y=e.clientY; }
+      else if(pointers.size===2){ const [p1,p2]=[...pointers.values()]; gStartAngle=angleBetween(p1,p2); gStartZ=angleZ; pinchStart=dist(p1,p2); pinchZoom0=zoomZ; isDragging=false; isRotating=true; didRotate=false; }
+    });
 
-el.addEventListener('pointerdown', e=>{
-  if (animating) return;
-  el.setPointerCapture(e.pointerId);
-  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if (pointers.size===1){ isDragging=true; isRotating=false; didRotate=false; last.x=e.clientX; last.y=e.clientY; }
-  else if (pointers.size===2){
-    const [p1,p2]=[...pointers.values()];
-    gStartAngle=angleBetween(p1,p2); gStartZ=angleZ;
-    pinchStart=dist(p1,p2); pinchZoom0=zoomZ;
-    isDragging=false; isRotating=true; didRotate=false;
-  }
-});
-el.addEventListener('pointermove', e=>{
-  if (!pointers.has(e.pointerId) || animating) return;
-  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if (pointers.size===1 && isDragging){
-    const dx=e.clientX-last.x, dy=e.clientY-last.y; last.x=e.clientX; last.y=e.clientY;
-    angleY += dx*Y_SENS; angleX = THREE.MathUtils.clamp(angleX + dy*X_SENS, -X_LIMIT, X_LIMIT);
-  } else if (pointers.size===2 && isRotating){
-    const [p1,p2]=[...pointers.values()];
-    const d=dist(p1,p2); if (pinchStart>0){ const s=d/pinchStart; setZoom(pinchZoom0 + (1 - s)*3.0); }
-    const cur=angleBetween(p1,p2); const deltaDeg=THREE.MathUtils.radToDeg(cur - gStartAngle);
-    if (isBack(angleY)){ angleZ = norm(gStartZ + deltaDeg*ROT_SENS_Z); if (Math.abs(deltaDeg)>0.5) didRotate=true; }
-  }
-});
-function endPointer(e){
-  if(!pointers.has(e.pointerId)) return;
-  try{ el.releasePointerCapture(e.pointerId); }catch{}
-  pointers.delete(e.pointerId);
-  if (pointers.size===0){ const wasRotate=didRotate; isDragging=false; isRotating=false; didRotate=false; if (wasRotate) snapAfterRotate(); else snapAfterDrag(); }
-  else if (pointers.size===1){ const only=[...pointers.values()][0]; last.x=only.x; last.y=only.y; isDragging=true; isRotating=false; }
-}
-el.addEventListener('pointerup', endPointer);
-el.addEventListener('pointercancel', endPointer);
-el.addEventListener('pointerleave', endPointer);
+    el.addEventListener('pointermove', (e)=>{
+      if(!pointers.has(e.pointerId) || animating) return;
+      pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+      if(pointers.size===1 && isDragging){
+        const dx=e.clientX-last.x, dy=e.clientY-last.y; last.x=e.clientX; last.y=e.clientY;
+        angleY += dx * Y_SENS; // schneller Flip
+        angleX = THREE.MathUtils.clamp(angleX + dy * X_SENS, -X_LIMIT, X_LIMIT);
+      } else if(pointers.size===2 && isRotating){
+        const [p1,p2]=[...pointers.values()];
+        // Pinch
+        const d = dist(p1,p2); if (pinchStart>0){ const scale=d/pinchStart; setZoom(pinchZoom0 + (1 - scale) * 3.0); }
+        // Twist (nur Back erlaubt)
+        const cur = angleBetween(p1,p2);
+        const deltaDeg = THREE.MathUtils.radToDeg(cur - gStartAngle);
+        if (isBack(angleY)) { angleZ = norm(gStartZ + deltaDeg * ROT_SENS_Z); if(Math.abs(deltaDeg)>0.5) didRotate = true; }
+      }
+    });
 
-// Wheel Zoom
-el.addEventListener('wheel', e=>{ const delta=(e.deltaY||0)*0.0015; setZoom(zoomZ + delta*3.0); e.preventDefault(); }, {passive:false});
+    function endPointer(e){
+      if(!pointers.has(e.pointerId)) return;
+      try{ el.releasePointerCapture(e.pointerId); }catch{}
+      pointers.delete(e.pointerId);
+      if(pointers.size===0){ const wasRotate = didRotate; isDragging=false; isRotating=false; didRotate=false; if (wasRotate) snapAfterRotate(); else snapAfterDrag(); }
+      else if(pointers.size===1){ const only=[...pointers.values()][0]; last.x=only.x; last.y=only.y; isDragging=true; isRotating=false; }
+    }
 
-// Resize
-window.addEventListener('resize', ()=>{
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
-});
-</script>
+    el.addEventListener('pointerup', endPointer);
+    el.addEventListener('pointercancel', endPointer);
+    el.addEventListener('pointerleave', endPointer);
+
+    // Trackpad/Mausrad Zoom
+    el.addEventListener('wheel', (e)=>{ const delta=(e.deltaY||0)*0.0015; setZoom(zoomZ + delta * 3.0); e.preventDefault(); }, { passive:false });
+
+    // Resize
+    window.addEventListener('resize', ()=>{ renderer.setSize(window.innerWidth, window.innerHeight); camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); });
+  </script>
 </body>
 </html>
